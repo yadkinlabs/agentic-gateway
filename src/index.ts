@@ -2,10 +2,8 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { secureHeaders } from "hono/secure-headers";
 import type { Env, ContextVariables } from "./types";
-import { authMiddleware } from "./middleware/auth";
-import { rateLimitMiddleware } from "./middleware/rate-limit";
 import { wafMiddleware } from "./middleware/waf";
-import { paymentMiddleware } from "./payment";
+import { x402Middleware } from "./middleware/x402";
 import { proxyToBackend } from "./proxy";
 import { writeAuditLog } from "./audit";
 
@@ -14,15 +12,16 @@ const app = new Hono<{ Bindings: Env; Variables: ContextVariables }>();
 app.use("*", secureHeaders());
 app.use("*", cors({ origin: "*", allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"] }));
 
-// Health — unauthenticated
+// Health — unauthenticated, no payment
 app.get("/health", (c) => c.json({ status: "ok" }));
 
-// All other routes: auth → WAF → rate limit → payment → proxy
-app.use("*", authMiddleware);
+// WAF runs first on all requests — blocks oversized payloads and prompt injection
 app.use("*", wafMiddleware);
-app.use("*", rateLimitMiddleware);
-app.use("*", paymentMiddleware);
 
+// x402 — POST/PUT/DELETE require payment proof; GET is free
+app.use("*", x402Middleware);
+
+// Proxy verified requests to the backend
 app.all("*", async (c) => {
   const response = await proxyToBackend(c);
 
@@ -30,11 +29,11 @@ app.all("*", async (c) => {
     writeAuditLog(
       {
         ts: new Date().toISOString(),
-        agentId: c.get("agent").agentId,
+        agentId: c.get("agentId"),
         method: c.req.method,
         path: new URL(c.req.url).pathname,
         status: response.status,
-        paymentRail: c.get("agent").paymentRail,
+        paymentRail: c.req.method === "GET" ? undefined : "x402",
       },
       c.env
     )

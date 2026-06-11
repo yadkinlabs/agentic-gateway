@@ -1,19 +1,9 @@
 export interface Env {
-  API_KEYS: KVNamespace;
-  RATE_LIMITS: KVNamespace;
-  CREDIT_BALANCES: KVNamespace;
+  RATE_LIMITS: KVNamespace; // reserved for future rate limiting by wallet
   BACKEND_URL: string;
-  STRIPE_SECRET_KEY: string;
-  X402_SECRET: string;
-  MPP_SECRET: string;
+  X402_PAY_TO: string;      // receiving wallet address (USDC on Base)
+  JOB_PRICE_CENTS: string;  // e.g. "100" = $1.00
   AUDIT_LOG_URL?: string;
-}
-
-export interface AgentIdentity {
-  agentId: string;
-  name: string;
-  rateLimitTier: "standard" | "premium";
-  paymentRail: "stripe" | "x402" | "mpp";
 }
 
 export interface AuditEntry {
@@ -23,14 +13,11 @@ export interface AuditEntry {
   path: string;
   status: number;
   paymentRail?: string;
-  amountCharged?: number; // USD cents
-  rateLimited?: boolean;
   blocked?: boolean;
   blockReason?: string;
 }
 
-// Hono context variables — set by middleware, read downstream
 export type ContextVariables = {
-  agent: AgentIdentity;
+  agentId: string;
   requestId: string;
 };
